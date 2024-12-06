@@ -18,6 +18,8 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(raylib)
 
+include_directories(${PROJECT_SOURCE_DIR}/include)
+
 # Adding Eigen3
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
