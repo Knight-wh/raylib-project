@@ -14,11 +14,15 @@ using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
 typedef enum {
-  FITTING_ONE = 0,
-  FITTING_TWO,
-  FITTING_THREE,
-  FITTING_FOUR
+  FITTING_ONE = 0,  // 插值 幂基函数线性组合
+  FITTING_TWO,      // 插值 Gauss基函数线性组合
+  FITTING_THREE,    // 逼近 固定幂基函数，最小二乘
+  FITTING_FOUR      // 逼近 岭回归
 } FittingType;
+
+float guassBasisFunc(float x, float x0, float sigma) {
+  return exp(-(pow(x - x0, 2)) / (2 * pow(sigma, 2)));
+}
 
 int main(void) {
   // Initialization
@@ -35,10 +39,10 @@ int main(void) {
   // config variables
   bool fittingTypeEditMode = false;
   int fittingTypeActive = FITTING_ONE;
-  bool sampleNumbersEditMode = false;
+  bool sampleRangeEditMode = false;
   bool clearPoints = false;
   bool calculateFitting = false;
-  int sampleNum = 20;
+  int sampleRange = 5;
 
   // Data
   std::vector<Vector2> points;
@@ -81,14 +85,15 @@ int main(void) {
 
     if (calculateFitting) {
       if (points.size() > 1) {
-        // calculate fitting
-        // Fitting ONE: Ax = B
+        // Fitting ONE & TWO: A * alpha = B
         int n = points.size();
         VectorXd alpha(n);
         VectorXd Y(n);
         MatrixXd A(n, n);
 
         double xMin = points[0].x, xMax = points[0].x;
+
+        const double sigma = 20;  // * important
 
         for (int i = 0; i < n; i++) {
           // cal sample range
@@ -100,11 +105,24 @@ int main(void) {
             xMin = points[i].x;
           }
 
-          for (int j = 0; j < n; j++) {
-            // set matrix
-            A(i, j) = pow(points[i].x, j);
-            Y(i) = points[i].y;
+          switch (fittingTypeActive) {
+            case FITTING_ONE:
+              for (int j = 0; j < n; j++) {
+                A(i, j) = pow(points[i].x, j);  // 幂基函数的线性组合
+              }
+              break;
+            case FITTING_TWO:
+              A(i, 0) = 1;
+              for (int j = 1; j < n; j++) {
+                A(i, j) = guassBasisFunc(points[i].x, points[j].x,
+                                         sigma);  // Gauss基函数的线性组合
+              }
+              break;
+            default:
+              break;
           }
+
+          Y(i) = points[i].y;
         }
 
         // alpha = A.fullPivLu().solve(y);  // 全分解
@@ -115,11 +133,24 @@ int main(void) {
         alpha = A.fullPivLu().solve(Y);  // 全分解
 
         samplePoints.clear();
+        int sampleNum = (int)ceil((xMax - xMin) / sampleRange);
         for (int i = 0; i < sampleNum; i++) {
           Vector2 samplePoint{0, 0};
-          samplePoint.x = (xMax - xMin) / (sampleNum + 1) * (i + 1) + xMin;
-          for (int j = 0; j < n; j++) {
-            samplePoint.y += alpha(j) * pow(samplePoint.x, j);
+          samplePoint.x = xMin + i * sampleRange;
+          switch (fittingTypeActive) {
+            case FITTING_ONE:
+              for (int j = 0; j < n; j++) {
+                samplePoint.y += alpha(j) * pow(samplePoint.x, j);
+              }
+              break;
+            case FITTING_TWO:
+              samplePoint.y = alpha(0);
+              for (int j = 1; j < n; j++) {
+                samplePoint.y += alpha(j) * guassBasisFunc(samplePoint.x,
+                                                           points[j].x, sigma);
+              }
+            default:
+              break;
           }
           samplePoints.push_back(samplePoint);
         }
@@ -130,6 +161,7 @@ int main(void) {
 
     if (clearPoints) {
       points.clear();
+      samplePoints.clear();
       clearPoints = false;
     }
 
@@ -157,13 +189,8 @@ int main(void) {
     }
 
     if (samplePoints.size() > 1) {
-      // Draw sample points
-      // for (int i = 0; i < sampleNum; i++) {
-      //   DrawCircle(samplePoints[i].x, samplePoints[i].y, 2, BLUE);
-      // }
-
       // Draw Fitting Line
-      for (int i = 0; i < sampleNum - 1; i++) {
+      for (int i = 0; i < samplePoints.size() - 1; i++) {
         DrawLineEx(samplePoints[i], samplePoints[i + 1], 2, RED);
       }
     }
@@ -187,16 +214,16 @@ int main(void) {
     // Check all possible UI states that require controls lock
     if (fittingTypeEditMode) GuiLock();
 
-    GuiLabel((Rectangle){rightPos, 10 + 24 + 28, 140, 24}, "Sample Numbers:");
+    GuiLabel((Rectangle){rightPos, 10 + 24 + 28, 140, 24}, "Sample Range:");
     if (GuiSpinner((Rectangle){rightPos, 10 + 24 + 28 + 24, 140, 24}, "",
-                   &sampleNum, 5, 100, sampleNumbersEditMode))
-      sampleNumbersEditMode = !sampleNumbersEditMode;
+                   &sampleRange, 1, 100, sampleRangeEditMode))
+      sampleRangeEditMode = !sampleRangeEditMode;
 
-    if (GuiButton((Rectangle){rightPos, 10 + 24 + 28 + 24, 140, 24},
+    if (GuiButton((Rectangle){rightPos, 10 + 24 + 28 + 24 + 24, 140, 24},
                   "#191#Clear Points"))
       clearPoints = true;
 
-    if (GuiButton((Rectangle){rightPos, 10 + 24 + 28 + 24 + 28, 140, 24},
+    if (GuiButton((Rectangle){rightPos, 10 + 24 + 28 + 24 + 28 + 24, 140, 24},
                   "Calculate Fitting"))
       calculateFitting = true;
 
