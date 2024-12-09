@@ -1,6 +1,10 @@
 # raylib Demo
 
-For learning use
+For learning use. Now for GAMES102.
+
+## Build
+
+**Eigen3** is required.
 
 ## Asset handling
 
