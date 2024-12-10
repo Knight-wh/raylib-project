@@ -1,6 +1,4 @@
-#include <Eigen/Core>
-#include <Eigen/LU>
-#include <Eigen/SVD>
+#include <Eigen/Dense>
 #include <cmath>  // Required for: pow(), ceil(), exp()
 #include <iostream>
 #include <vector>
@@ -45,7 +43,8 @@ int main(void) {
   bool clearPoints = false;
   bool calculateFitting = false;
   int sampleRange = 5;
-  const double sigma = 20;  // * important
+  const double sigma = 20;    // * for guass basis
+  const double lambda = 0.1;  // * for ridge regression
 
   // Data
   std::vector<Vector2> points;
@@ -90,8 +89,10 @@ int main(void) {
       if (points.size() > 1) {
         // A * alpha = B
         int n = points.size();
-        int order =
-            fittingTypeActive == FITTING_THREE ? 2 : n;  // TODO: 2 order
+        int order = fittingTypeActive == FITTING_THREE ||
+                            fittingTypeActive == FITTING_FOUR
+                        ? 2
+                        : n;  // TODO: 2 order
         VectorXd alpha(order);
         VectorXd Y(n);
         MatrixXd A(n, order);
@@ -109,7 +110,8 @@ int main(void) {
           }
 
           if (fittingTypeActive == FITTING_ONE ||
-              fittingTypeActive == FITTING_THREE) {
+              fittingTypeActive == FITTING_THREE ||
+              fittingTypeActive == FITTING_FOUR) {
             for (int j = 0; j < order; j++) {
               A(i, j) = pow(points[i].x, j);  // 幂基函数的线性组合
             }
@@ -131,7 +133,14 @@ int main(void) {
         } else if (fittingTypeActive == FITTING_THREE) {
           // regression
           alpha = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(Y);
+        } else if (fittingTypeActive == FITTING_FOUR) {
+          // regression
+          MatrixXd AtA = A.transpose() * A;
+          MatrixXd lambdaI = MatrixXd::Identity(order, order) * lambda;
+          MatrixXd A1 = AtA + lambdaI;
+          alpha = A1.ldlt().solve(A.transpose() * Y);
         }
+        // std::cout << alpha << std::endl;
 
         // cal sample points
         samplePoints.clear();
@@ -140,7 +149,8 @@ int main(void) {
           Vector2 samplePoint{0, 0};
           samplePoint.x = xMin + i * sampleRange;
           if (fittingTypeActive == FITTING_ONE ||
-              fittingTypeActive == FITTING_THREE) {
+              fittingTypeActive == FITTING_THREE ||
+              fittingTypeActive == FITTING_FOUR) {
             for (int j = 0; j < order; j++) {
               samplePoint.y += alpha(j) * pow(samplePoint.x, j);
             }
